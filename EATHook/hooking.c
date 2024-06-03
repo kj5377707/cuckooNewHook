@@ -882,6 +882,7 @@ PIMAGE_NT_HEADERS GetLocalNtHead(char *lib)
 
 int IATHook(hook_t *h)
 {
+
 	PVOID pFuncAddress = NULL;
 	pFuncAddress = GetProcAddress(GetModuleHandleA(h->library), h->funcname);  
   log_debug("function name = %s\n", h->funcname);
@@ -956,15 +957,11 @@ int hook(hook_t *h, void *module_handle)
     if(h->is_hooked != 0) {
         return 0;
     }
-    if (IATHook(h)) {
-      if (EATHook(h)) {
+    if (EATHook(h)) {
+        log_debug("success to hook");
         return 1;
-      } else {
-        log_debug("fail to EATHook");
-    } else {
-      log_debug("fail to IATHook");
-      }
     }
+    return 0;
 }
 
 uint8_t *hook_get_mem()
