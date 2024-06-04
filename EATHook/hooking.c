@@ -878,57 +878,17 @@ PIMAGE_NT_HEADERS GetLocalNtHead(char *lib)
 	dwTemp = (DWORD)pDosHead + (DWORD)pDosHead->e_lfanew;
 	pNtHead = (PIMAGE_NT_HEADERS)dwTemp;                                   
 	return pNtHead;
-}
-
-int IATHook(hook_t *h)
-{
-
-	PVOID pFuncAddress = NULL;
-	pFuncAddress = GetProcAddress(GetModuleHandleA(h->library), h->funcname);  
-  log_debug("function name = %s\n", h->funcname);
-  log_debug("old = %p\n", pFuncAddress);
-	h -> orig = (FARPROC *)pFuncAddress;                                  
-	PIMAGE_NT_HEADERS pNtHead = GetLocalNtHead();                                  
-	PIMAGE_FILE_HEADER pFileHead = (PIMAGE_FILE_HEADER)&pNtHead->FileHeader;
-	PIMAGE_OPTIONAL_HEADER pOpHead = (PIMAGE_OPTIONAL_HEADER)&pNtHead->OptionalHeader;
-
-	DWORD dwInputTable = pOpHead->DataDirectory[1].VirtualAddress;    
-	DWORD dwTemp = (DWORD)GetModuleHandle(NULL) + dwInputTable;
-	PIMAGE_IMPORT_DESCRIPTOR   pImport = (PIMAGE_IMPORT_DESCRIPTOR)dwTemp;
-	PIMAGE_IMPORT_DESCRIPTOR   pCurrent = pImport;
-	DWORD *pFirstThunk; 
-
-  int flag = 0;
-	while (pCurrent->Characteristics && pCurrent->FirstThunk != NULL)
-	{
-		dwTemp = pCurrent->FirstThunk + (DWORD)GetModuleHandle(NULL);
-		pFirstThunk = (DWORD *)dwTemp;                               
-		while (*(DWORD*)pFirstThunk != NULL)                      
-		{
-			if (*(DWORD*)pFirstThunk == (DWORD)OldFunctionAddress)       
-			{
-				DWORD oldProtected;
-				VirtualProtect(pFirstThunk, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtected);  
-				dwTemp = (DWORD)h->handler;
-				memcpy(pFirstThunk, (DWORD *)&dwTemp, 4);
-				VirtualProtect(pFirstThunk, 0x1000, oldProtected, &oldProtected);            
-        pipe("success to hook function %s\n", h->funcname);
-        return 1;
-			}
-			pFirstThunk++; 
-		}
-		pCurrent++;        
-	}
+  }
 }
 
 int EATHook(hook_t *h) {
   DWORD addr = 0, index = 0, dwProtect = 0;
   HMODULE DllBase = LoadLibrary(h -> library);
   PIMAGE_NT_HEADERS pNtHead = GetLocalNtHead(h -> library);
-  PIMAGE_OPTIONAL_HEADER pOptHead = (PIMAGE_OPTIONAL_HEADER) (&pNtHeader -> OptionalHeader);
+  PIMAGE_OPTIONAL_HEADER pOptHead = (PIMAGE_OPTIONAL_HEADER) (&pNtHead -> OptionalHeader);
   PIMAGE_EXPORT_DIRECTORY pExpDes = (PIMAGE_EXPORT_DIRECTORY)
     ((PBYTE)DllBase + pOptHead -> DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
-  PULONG pAddressOfFunctions = (PULONG)((PBYTE)DllBase + pExpDes -> AddressOfFunction);
+  PULONG pAddressOfFunctions = (PULONG)((PBYTE)DllBase + pExpDes -> AddressOfFunctions);
   PULONG pAddressOfNames = (PULONG)((PBYTE)DllBase + pExpDes->AddressOfNames);
   PUSHORT pAddressOfNameOrdinals = (PUSHORT)((PBYTE)DllBase + pExpDes->AddressOfNameOrdinals);
   
@@ -944,7 +904,7 @@ int EATHook(hook_t *h) {
 
   VirtualProtect(&pAddressOfFunctions[index], 0x1000, PAGE_READWRITE, &dwProtect);
 
-  pAddressOfFunctions[index] = (DOWRD)h -> handler - (DWORD)DllBase;
+  pAddressOfFunctions[index] = ((DWORD)(h -> handler)) - (DWORD)DllBase;
 
   WriteProcessMemory(GetCurrentProcess(), &pAddressOfFunctions[index],
     (LPCVOID)((DWORD)h -> handler - (DWORD)DllBase), sizeof(h -> handler), &dwProtect);
