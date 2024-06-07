@@ -878,6 +878,7 @@ PIMAGE_NT_HEADERS GetLocalNtHead(char *lib)
 	dwTemp = (DWORD)pDosHead + (DWORD)pDosHead->e_lfanew;
 	pNtHead = (PIMAGE_NT_HEADERS)dwTemp;                                   
 	return pNtHead;
+  }
 }
 
 int IATHook(hook_t *h)
@@ -888,7 +889,7 @@ int IATHook(hook_t *h)
   log_debug("function name = %s\n", h->funcname);
   log_debug("old = %p\n", pFuncAddress);
 	h -> orig = (FARPROC *)pFuncAddress;                                  
-	PIMAGE_NT_HEADERS pNtHead = GetLocalNtHead();                                  
+	PIMAGE_NT_HEADERS pNtHead = GetLocalNtHead(NULL);                                  
 	PIMAGE_FILE_HEADER pFileHead = (PIMAGE_FILE_HEADER)&pNtHead->FileHeader;
 	PIMAGE_OPTIONAL_HEADER pOpHead = (PIMAGE_OPTIONAL_HEADER)&pNtHead->OptionalHeader;
 
@@ -905,7 +906,7 @@ int IATHook(hook_t *h)
 		pFirstThunk = (DWORD *)dwTemp;                               
 		while (*(DWORD*)pFirstThunk != NULL)                      
 		{
-			if (*(DWORD*)pFirstThunk == (DWORD)OldFunctionAddress)       
+			if (*(DWORD*)pFirstThunk == (DWORD)pFuncAddress)       
 			{
 				DWORD oldProtected;
 				VirtualProtect(pFirstThunk, 0x1000, PAGE_EXECUTE_READWRITE, &oldProtected);  
@@ -920,37 +921,6 @@ int IATHook(hook_t *h)
 		pCurrent++;        
 	}
 }
-
-int EATHook(hook_t *h) {
-  DWORD addr = 0, index = 0, dwProtect = 0;
-  HMODULE DllBase = LoadLibrary(h -> library);
-  PIMAGE_NT_HEADERS pNtHead = GetLocalNtHead(h -> library);
-  PIMAGE_OPTIONAL_HEADER pOptHead = (PIMAGE_OPTIONAL_HEADER) (&pNtHeader -> OptionalHeader);
-  PIMAGE_EXPORT_DIRECTORY pExpDes = (PIMAGE_EXPORT_DIRECTORY)
-    ((PBYTE)DllBase + pOptHead -> DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
-  PULONG pAddressOfFunctions = (PULONG)((PBYTE)DllBase + pExpDes -> AddressOfFunction);
-  PULONG pAddressOfNames = (PULONG)((PBYTE)DllBase + pExpDes->AddressOfNames);
-  PUSHORT pAddressOfNameOrdinals = (PUSHORT)((PBYTE)DllBase + pExpDes->AddressOfNameOrdinals);
-  
-  for (int i = 0; i < pExpDes -> NumberOfNames; i++) {
-       index = pAddressOfNames[i];
-       LPCTSTR pFuncName = (LPTSTR)((PBYTE)DllBase + pAddressOfNames[i]);
-
-       if (!_tcscmp((LPCTSTR)pFuncName, h -> funcname)) {
-          addr = pAddressOfFunctions[index];
-          break;
-       }
-  }
-
-  VirtualProtect(&pAddressOfFunctions[index], 0x1000, PAGE_READWRITE, &dwProtect);
-
-  pAddressOfFunctions[index] = (DOWRD)h -> handler - (DWORD)DllBase;
-
-  WriteProcessMemory(GetCurrentProcess(), &pAddressOfFunctions[index],
-    (LPCVOID)((DWORD)h -> handler - (DWORD)DllBase), sizeof(h -> handler), &dwProtect);
-  return 1;
-}
-
 
 int hook(hook_t *h, void *module_handle)
 {
